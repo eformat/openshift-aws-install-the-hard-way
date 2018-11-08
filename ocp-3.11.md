@@ -1,4 +1,4 @@
-### 3.11 OpenShift install on AWS the hard way
+## 3.11 OpenShift install on AWS the hard way
 
 Updated for 3.11 install. A Minimal install (all of the bits can be changed):
 - 9 node cluster (x3 masters, x3 infra, x3 app)
@@ -14,6 +14,10 @@ Read the docs:
 - https://docs.okd.io/latest/install_config/configuring_aws.html
 - https://access.redhat.com/documentation/en-us/reference_architectures/2018/html/deploying_and_managing_openshift_3.9_on_amazon_web_services
 - https://access.redhat.com/documentation/en-us/reference_architectures/2018/html/deploying_and_managing_openshift_3.9_on_amazon_web_services/reference_architecture_summary
+
+### Setup
+
+Use a Bash shell
 
 Install AWS Client on your linux laptop
  
@@ -54,6 +58,8 @@ aws ec2 describe-images --owners 309956199498 \
 "Name=name,Values=RHEL*7.6*GA*Access*" \
 --region ap-southeast-2
 ```
+
+### Install AWS Infrastructure
 
 From your laptop, set some environment variables, change to suit, small sized vms just to test the install out
 
@@ -1005,6 +1011,8 @@ masters
 EOF
 ```
 
+### Install OpenShift
+
 Prep the bastion host, as ec2-user
 
 ```bash
@@ -1056,8 +1064,8 @@ Using github oauth application for login. Create a github org.
 ```bash
 Settings >  Developer settings > OAuth Apps
 New OAuth App > ocp_3.11_aws
-https://master.eformat.nz
-https://master.eformat.nz/oauth2callback/github
+https://master.ocp.eformat.nz
+https://master.ocp.eformat.nz/oauth2callback/github
 ```
 
 Disbale rhui manually on bastion
@@ -1168,7 +1176,7 @@ oreg_url=registry.redhat.io/openshift3/ose-${component}:${version}
 oreg_auth_credentials_replace=true
 
 # login
-openshift_master_identity_providers=[{'name': 'google', 'challenge':'false', 'login': 'true', 'kind': 'GoogleIdentityProvider','mapping_method': 'claim', 'clientID': '<client id>','clientSecret': '<client secret>', 'hostedDomain': 'eformat.nz'}]
+openshift_master_identity_providers=[{'name': 'github', 'challenge':'false', 'login': 'true', 'kind': 'GitHubIdentityProvider','mapping_method': 'claim', 'clientID': '<client id>','clientSecret': '<client secret>'}]
 
 # config-ocp.eformat.nz-cpk
 openshift_cloudprovider_kind=aws
@@ -1270,4 +1278,106 @@ Deploy OpenShift
 
 ```bash
 ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml
+```
+
+### Delete it ALL
+
+The AWS bits are notorious for being dependent on each other. AWS EC2,VPC Dashbaord's are the best place to delete everything.
+
+RedHat remove subscriptions from bastion
+
+```bash
+ansible nodes -b -m shell -a 'subscription-manager unsubscribe --all'
+ansible nodes -b -m shell -a 'subscription-manager unregister'
+```
+
+From your laptop
+
+Environment variables for deletion
+
+```bash
+export region="ap-southeast-2"
+export clusterid="ocp"
+export dns_domain="eformat.nz"
+```
+
+Delete instances
+```bash
+aws ec2 terminate-instances --region=${region} --instance-ids $(aws ec2 describe-instances --region=${region} --filters "Name=instance-state-name,Values=pending,running,stopped,stopping" --query "Reservations[].Instances[].[InstanceId]" --output text | tr '\n' ' ')
+
+sleep 100
+```
+
+Delete Volumes
+
+```bash
+for i in `aws ec2 describe-volumes --region=${region} --query "Volumes[].VolumeId" --output text | tr '\n' ' '`; do aws ec2 delete-volume --region=${region} --volume-id $i; done
+```
+
+Get VpcId
+
+```bash
+export vpcid=$(aws ec2 describe-vpcs --region=${region} --filters Name=tag:Name,Values=${clusterid} --query "Vpcs[].VpcId" | jq '.[0]' | sed -e 's/"//g')
+echo ${vpcid}
+```
+
+Delete Load Balancers
+
+```bash
+for i in `aws elb describe-load-balancers --region=${region} --query="LoadBalancerDescriptions[].LoadBalancerName" --output text | tr '\n' ' '`; do aws elb delete-load-balancer --region=${region} --load-balancer-name ${i}; done
+```
+
+Delete Route Tables
+
+```bash
+for i in `aws ec2 describe-route-tables --region=${region} --query="RouteTables[].RouteTableId" --output text | tr '\n' ' '`; do aws ec2 delete-route-table --region=${region} --route-table-id=${i}; done
+```
+
+Delete subnets
+
+```bash
+for i in `aws ec2 describe-subnets --region=${region} --filters Name=vpc-id,Values="${vpcid}" | grep subnet- | sed -E 's/^.*(subnet-[a-z0-9]+).*$/\1/'`; do aws ec2 delete-subnet --region=${region} --subnet-id=$i; done
+```
+
+Delete ENI's
+
+```bash
+for i in `aws ec2 describe-network-interfaces --region=${region} --query "NetworkInterfaces[].NetworkInterfaceId" | grep eni- | sed -E 's/^.*(eni-[a-z0-9]+).*$/\1/'`; do aws ec2 delete-network-interface --region=${region} --network-interface-id=${i}; done
+```
+
+Delete internet gateways
+
+```bash
+for i in `aws ec2 describe-internet-gateways --region=${region} --filters Name=attachment.vpc-id,Values="${vpcid}" | grep igw- | sed -E 's/^.*(igw-[a-z0-9]+).*$/\1/'`; do aws ec2 delete-internet-gateway --region=${region} --internet-gateway-id=$i; done
+```
+
+Delete security groups (ignore message about being unable to delete default security group)
+
+```bash
+for i in `aws ec2 describe-security-groups --region=${region} --filters Name=vpc-id,Values="${vpcid}" | grep sg- | sed -E 's/^.*(sg-[a-z0-9]+).*$/\1/' | sort | uniq`; do aws ec2 delete-security-group --region=${region} --group-id $i; done
+```
+
+Delete the VPC
+
+```bash
+aws ec2 delete-vpc --vpc-id ${vpcid} --region=${region}
+```
+
+Delete S3
+
+```bash
+aws s3api delete-bucket --region ${region} --bucket $(aws s3api list-buckets --region ${region} --query "Buckets[].Name" --output text | tr '\n' ' ')
+```
+
+Delete Keys
+
+```bash
+aws ec2 delete-key-pair --region ${region} --key-name ${clusterid}.${dns_domain}
+```
+
+Delete Users
+
+```bash
+aws iam delete-user --user-name ${clusterid}.${dns_domain}-admin
+aws iam delete-user --user-name ${clusterid}.${dns_domain}-registry
 ```
