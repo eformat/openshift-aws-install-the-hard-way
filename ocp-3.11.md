@@ -55,7 +55,7 @@ aws ec2 describe-images --owners 309956199498 \
 --region ap-southeast-2
 ```
 
-From your laptop, set some environment variables, change to suit
+From your laptop, set some environment variables, change to suit, small sized vms just to test the install out
 
 ```bash
 export clusterid="ocp"
