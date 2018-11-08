@@ -1,8 +1,8 @@
 ## 3.11 OpenShift install on AWS the hard way
 
 Updated for 3.11 install. A Minimal install (all of the bits can be changed):
-- 9 node cluster (x3 masters, x3 infra, x3 app)
-- uses `t2.micro` for all vm's for fun and cost
+- 9 node HA cluster (x3 masters, x3 infra, x3 app)
+- uses `t2.small|t2.medium` for all vm's for fun and cost
 - does not install OCS (see docs for details to do this) 
 - uses latest RHEL cloud access ami images
 - based on ocp 3.9 instructions, but install is for ocp 3.11
