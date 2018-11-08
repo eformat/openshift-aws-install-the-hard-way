@@ -881,7 +881,7 @@ aws ec2 create-tags --region=${region} --resources $(echo ${awssg_node} | jq -r 
 aws ec2 create-tags --region=${region} --resources $(echo ${awssg_node} | jq -r '.GroupId') --tags Key=clusterid,Value=${clusterid}
 ```
 
-Create Config Files for later
+Create Config Files for later use in ansible hosts file
 
 ```bash
 cat << EOF > ~/.ssh/config-${clusterid}.${dns_domain}
