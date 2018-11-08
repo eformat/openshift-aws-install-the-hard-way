@@ -824,6 +824,8 @@ for i in {1..3}; do
             {Key=kubernetes.io/cluster/${clusterid},Value=${clusterid}}]"
         )"
 done
+
+sleep 300 # wait till instances are in running state
 ```
 
 Register EC2s to ELB’s
@@ -1007,8 +1009,8 @@ Prep the bastion host, as ec2-user
 
 ```bash
 scp ~/.ssh/config-ocp.eformat.nz bastion:~/.ssh
-scp ocp.eformat.nz.pub bastion:~/.ssh
-scp ocp.eformat.nz bastion:~/.ssh
+scp ~/.ssh/ocp.eformat.nz.pub bastion:~/.ssh
+scp ~/.ssh/ocp.eformat.nz bastion:~/.ssh
 
 ssh bastion
 cd .ssh
@@ -1061,13 +1063,14 @@ https://master.eformat.nz/oauth2callback/github
 Disbale rhui manually on bastion
 
 ```bash
+sudo su -
 yum-config-manager \
 --disable 'rhui-REGION-client-config-server-7' \
 --disable 'rhui-REGION-rhel-server-rh-common' \
---disable 'rhui-REGION-rhel-server-releases'"
+--disable 'rhui-REGION-rhel-server-releases'
 ```
 
-Subscribe bastion
+Subscribe bastion, openshift pool
 
 ```bash
 subscription-manager register --username=<user> --password=<pwd>
@@ -1094,12 +1097,15 @@ yum -y install ansible atomic-openshift-utils atomic-client-utils openshift-ansi
 Setup a basic ansible/hosts
 
 ```bash
-scp ~/.ssh/config-ocp.eformat.nz-hosts bastion:/etc/ansible/hosts
+scp ~/.ssh/config-ocp.eformat.nz-hosts bastion:/tmp/hosts
+# as root on bastion
+cp /tmp/hosts /etc/ansible/hosts
 ```
 
 As ec2-user, from bastion, check ssh, this should succeed all node hosts
 
 ```bash
+export ANSIBLE_HOST_KEY_CHECKING=False
 ansible nodes -b -m ping
 ```
 
@@ -1133,11 +1139,12 @@ ansible nodes -b -m shell -a \
     --enable="rhel-7-server-ansible-2.6-rpms"'
 ```
 
-Create `/etc/ansible/hosts` file
+Create a bigger `/etc/ansible/hosts` file on the bastion as root user
 
-Create a service account for terms based registry `registry.redhat.io`
-
-https://access.redhat.com/terms-based-registry
+Credentials you need:
+- RedHat - Create a service account for terms based registry `registry.redhat.io` for authenticated access: https://access.redhat.com/terms-based-registry
+- AWS access and secret keys
+- Github oauth application based login
 
 ```bash
 # Create an OSEv3 group that contains the masters and nodes groups
@@ -1145,6 +1152,7 @@ https://access.redhat.com/terms-based-registry
 masters
 nodes
 etcd
+# lb
 
 # Set variables common for all OSEv3 hosts
 [OSEv3:vars]
@@ -1229,10 +1237,11 @@ openshift_docker_options="--log-driver json-file --log-opt max-size=1M --log-opt
 # pre-install checks disable
 openshift_disable_check=memory_availability,disk_availability,docker_storage,package_availability,package_version,docker_image_availability
 
+# config-ocp.eformat.nz-hosts
 [masters]
-ip-172-16-28-248.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
-ip-172-16-47-90.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
-ip-172-16-52-174.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
+ip-172-16-24-133.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
+ip-172-16-38-204.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
+ip-172-16-58-66.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
 
 [etcd]
 
@@ -1240,12 +1249,12 @@ ip-172-16-52-174.ap-southeast-2.compute.internal openshift_node_group_name='node
 masters
 
 [nodes]
-ip-172-16-23-206.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
-ip-172-16-44-150.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
-ip-172-16-62-254.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
-ip-172-16-18-192.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
-ip-172-16-42-110.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
-ip-172-16-63-223.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
+ip-172-16-29-69.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
+ip-172-16-45-24.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
+ip-172-16-57-146.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
+ip-172-16-17-192.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
+ip-172-16-43-47.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
+ip-172-16-53-222.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
 
 [nodes:children]
 masters
