@@ -21,7 +21,7 @@ Use a Bash shell
 
 Install AWS Client on your linux laptop
  
-```bash
+```
 pip install awscli --upgrade --user
 
 See: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
@@ -29,7 +29,7 @@ See: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.ht
 
 Configure aws client, you need your `Access Key ID`, `Secret Access Key`
 
-```bash
+```
 aws configure
 ```
 
@@ -41,7 +41,7 @@ aws sts get-caller-identity
 
 Get the RedHat Cloud Access AMI's (takes a couple business days)
 
-```bash
+```
 # cloud access
 https://access.redhat.com/articles/2962171
 https://www.redhat.com/en/technologies/cloud-computing/cloud-access
@@ -71,7 +71,8 @@ export cidrvpc="172.16.0.0/16"
 export cidrsubnets_public=("172.16.0.0/24" "172.16.1.0/24" "172.16.2.0/24")
 export cidrsubnets_private=("172.16.16.0/20" "172.16.32.0/20" "172.16.48.0/20")
 export ec2_type_bastion="t2.small"
-export ec2_type_master="t2.medium"
+#export ec2_type_master="t2.medium"
+export ec2_type_master="t2.small"
 export ec2_type_infra="t2.small"
 export ec2_type_node="t2.small"
 export rhel_release="rhel-7.6"
@@ -749,7 +750,7 @@ export ec2_bastion=$(aws ec2 run-instances \
     --user-data "$(/tmp/ec2_userdata.sh bastion ${ec2_type_bastion})" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=bastion},{Key=Clusterid,Value=${clusterid}}]")
 
-sleep 15
+sleep 30
 
 aws ec2 associate-address \
 --region=${region} \
@@ -1015,7 +1016,7 @@ EOF
 
 Prep the bastion host, as ec2-user
 
-```bash
+```
 scp ~/.ssh/config-ocp.eformat.nz bastion:~/.ssh
 scp ~/.ssh/ocp.eformat.nz.pub bastion:~/.ssh
 scp ~/.ssh/ocp.eformat.nz bastion:~/.ssh
@@ -1055,13 +1056,13 @@ ln -s config-ocp.eformat.nz config
 
 Delegate DNS in your dns provider in to aws servers (create public route53, delegate dns to aws)
 
-```bash
+```
 cat ~/.ssh/config-ocp.eformat.nz-domaindelegation
 ```
 
 Using github oauth application for login. Create a github org.
 
-```bash
+```
 Settings >  Developer settings > OAuth Apps
 New OAuth App > ocp_3.11_aws
 https://master.ocp.eformat.nz
@@ -1070,7 +1071,7 @@ https://master.ocp.eformat.nz/oauth2callback/github
 
 Disbale rhui manually on bastion
 
-```bash
+```
 sudo su -
 yum-config-manager \
 --disable 'rhui-REGION-client-config-server-7' \
@@ -1080,14 +1081,14 @@ yum-config-manager \
 
 Subscribe bastion, openshift pool
 
-```bash
+```
 subscription-manager register --username=<user> --password=<pwd>
 subscription-manager subscribe --pool=<pool>
 ```
 
 OCP 3.11
 
-```bash
+```
 subscription-manager repos --disable="*"
 subscription-manager repos --enable="rhel-7-server-ose-3.11-rpms" \
     --enable="rhel-7-server-rpms" \
@@ -1097,14 +1098,14 @@ subscription-manager repos --enable="rhel-7-server-ose-3.11-rpms" \
 
 RPM prereqs
 
-```bash
+```
 yum -y install wget git net-tools bind-utils yum-utils iptables-services bridge-utils bash-completion kexec-tools sos psacct
 yum -y install ansible atomic-openshift-utils atomic-client-utils openshift-ansible
 ```
 
 Setup a basic ansible/hosts
 
-```bash
+```
 scp ~/.ssh/config-ocp.eformat.nz-hosts bastion:/tmp/hosts
 # as root on bastion
 cp /tmp/hosts /etc/ansible/hosts
@@ -1112,7 +1113,7 @@ cp /tmp/hosts /etc/ansible/hosts
 
 As ec2-user, from bastion, check ssh, this should succeed all node hosts
 
-```bash
+```
 export ANSIBLE_HOST_KEY_CHECKING=False
 ansible nodes -b -m ping
 ```
@@ -1121,7 +1122,7 @@ Prepare ALL Node hosts
 
 Disbale RHUI
 
-```bash
+```
 ansible nodes -b -m command -a "yum-config-manager \
 --disable 'rhui-REGION-client-config-server-7' \
 --disable 'rhui-REGION-rhel-server-rh-common' \
@@ -1130,7 +1131,7 @@ ansible nodes -b -m command -a "yum-config-manager \
 
 Subscription manager
 
-```bash
+```
 ansible nodes -b -m redhat_subscription -a \
 "state=present username=<user> password=<password>
 pool_ids=<pool>"
@@ -1138,7 +1139,7 @@ pool_ids=<pool>"
 
 Repos
 
-```bash
+```
 ansible nodes -b -m shell -a \
 'subscription-manager repos --disable="*" \
     --enable="rhel-7-server-ose-3.11-rpms" \
@@ -1154,7 +1155,7 @@ Credentials you need:
 - AWS access and secret keys
 - Github oauth application based login
 
-```bash
+```
 # Create an OSEv3 group that contains the masters and nodes groups
 [OSEv3:children]
 masters
@@ -1270,13 +1271,13 @@ masters
 
 Setup Container storage and other deps from bastion as ec2-user
 
-```bash
+```
 ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/prerequisites.yml
 ```
 
 Deploy OpenShift
 
-```bash
+```
 ansible-playbook /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml
 ```
 
@@ -1286,7 +1287,7 @@ The AWS bits are notorious for being dependent on each other. AWS EC2,VPC Dashba
 
 RedHat remove subscriptions from bastion
 
-```bash
+```
 ansible nodes -b -m shell -a 'subscription-manager unsubscribe --all'
 ansible nodes -b -m shell -a 'subscription-manager unregister'
 ```
@@ -1295,14 +1296,14 @@ From your laptop
 
 Environment variables for deletion
 
-```bash
+```
 export region="ap-southeast-2"
 export clusterid="ocp"
 export dns_domain="eformat.nz"
 ```
 
 Delete instances
-```bash
+```
 aws ec2 terminate-instances --region=${region} --instance-ids $(aws ec2 describe-instances --region=${region} --filters "Name=instance-state-name,Values=pending,running,stopped,stopping" --query "Reservations[].Instances[].[InstanceId]" --output text | tr '\n' ' ')
 
 sleep 100
@@ -1310,74 +1311,74 @@ sleep 100
 
 Delete Volumes
 
-```bash
+```
 for i in `aws ec2 describe-volumes --region=${region} --query "Volumes[].VolumeId" --output text | tr '\n' ' '`; do aws ec2 delete-volume --region=${region} --volume-id $i; done
 ```
 
 Get VpcId
 
-```bash
+```
 export vpcid=$(aws ec2 describe-vpcs --region=${region} --filters Name=tag:Name,Values=${clusterid} --query "Vpcs[].VpcId" | jq '.[0]' | sed -e 's/"//g')
 echo ${vpcid}
 ```
 
 Delete Load Balancers
 
-```bash
+```
 for i in `aws elb describe-load-balancers --region=${region} --query="LoadBalancerDescriptions[].LoadBalancerName" --output text | tr '\n' ' '`; do aws elb delete-load-balancer --region=${region} --load-balancer-name ${i}; done
 ```
 
 Delete Route Tables
 
-```bash
+```
 for i in `aws ec2 describe-route-tables --region=${region} --query="RouteTables[].RouteTableId" --output text | tr '\n' ' '`; do aws ec2 delete-route-table --region=${region} --route-table-id=${i}; done
 ```
 
 Delete subnets
 
-```bash
+```
 for i in `aws ec2 describe-subnets --region=${region} --filters Name=vpc-id,Values="${vpcid}" | grep subnet- | sed -E 's/^.*(subnet-[a-z0-9]+).*$/\1/'`; do aws ec2 delete-subnet --region=${region} --subnet-id=$i; done
 ```
 
 Delete ENI's
 
-```bash
+```
 for i in `aws ec2 describe-network-interfaces --region=${region} --query "NetworkInterfaces[].NetworkInterfaceId" | grep eni- | sed -E 's/^.*(eni-[a-z0-9]+).*$/\1/'`; do aws ec2 delete-network-interface --region=${region} --network-interface-id=${i}; done
 ```
 
 Delete internet gateways
 
-```bash
+```
 for i in `aws ec2 describe-internet-gateways --region=${region} --filters Name=attachment.vpc-id,Values="${vpcid}" | grep igw- | sed -E 's/^.*(igw-[a-z0-9]+).*$/\1/'`; do aws ec2 delete-internet-gateway --region=${region} --internet-gateway-id=$i; done
 ```
 
 Delete security groups (ignore message about being unable to delete default security group)
 
-```bash
+```
 for i in `aws ec2 describe-security-groups --region=${region} --filters Name=vpc-id,Values="${vpcid}" | grep sg- | sed -E 's/^.*(sg-[a-z0-9]+).*$/\1/' | sort | uniq`; do aws ec2 delete-security-group --region=${region} --group-id $i; done
 ```
 
 Delete the VPC
 
-```bash
+```
 aws ec2 delete-vpc --vpc-id ${vpcid} --region=${region}
 ```
 
 Delete S3
 
-```bash
+```
 aws s3api delete-bucket --region ${region} --bucket $(aws s3api list-buckets --region ${region} --query "Buckets[].Name" --output text | tr '\n' ' ')
 ```
 
 Delete Keys
 
-```bash
+```
 aws ec2 delete-key-pair --region ${region} --key-name ${clusterid}.${dns_domain}
 ```
 
 Delete Users
 
-```bash
+```
 aws iam delete-user --user-name ${clusterid}.${dns_domain}-admin
 aws iam delete-user --user-name ${clusterid}.${dns_domain}-registry
 ```
