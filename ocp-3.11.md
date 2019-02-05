@@ -71,10 +71,9 @@ export cidrvpc="172.16.0.0/16"
 export cidrsubnets_public=("172.16.0.0/24" "172.16.1.0/24" "172.16.2.0/24")
 export cidrsubnets_private=("172.16.16.0/20" "172.16.32.0/20" "172.16.48.0/20")
 export ec2_type_bastion="t2.small"
-#export ec2_type_master="t2.medium"
-export ec2_type_master="t2.small"
-export ec2_type_infra="t2.small"
-export ec2_type_node="t2.small"
+export ec2_type_master="t2.medium"
+export ec2_type_infra="t2.large"
+export ec2_type_node="t2.large"
 export rhel_release="rhel-7.6"
 ```
 
@@ -976,7 +975,7 @@ openshift_hosted_registry_pullthrough=true
 openshift_hosted_registry_acceptschema2=true
 openshift_hosted_registry_enforcequota=true
 openshift_hosted_registry_replicas=3
-openshift_hosted_registry_selector='region=infra'
+openshift_hosted_registry_selector={"node-role.kubernetes.io/infra":"true"}
 #<!-- END OUTPUT -->
 EOF
 
@@ -1010,6 +1009,51 @@ $(echo ${ec2_infra3} | jq -r '.Instances[].PrivateDnsName') openshift_node_label
 [nodes:children]
 masters
 EOF
+```
+
+### (Optional) Lets Encrypt ACME DNS
+
+Create certificates for the cluster. Ensure master host dns resolves OK. 
+
+```
+git clone https://github.com/Neilpang/acme.sh.git
+cd acme.sh
+-- using https://github.com/Neilpang/acme.sh#currently-acmesh-supports AWS Route53
+-- see ~/.aws/credentials
+egrep 'AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY' dnsapi/dns_aws.sh | head -2
+AWS_ACCESS_KEY_ID="xxxxxxx"
+AWS_SECRET_ACCESS_KEY="xxxxxxx"
+
+-- request wildcard cert
+./acme.sh --issue -d master.ocp.eformat.nz -d *.apps.ocp.eformat.nz --dns dns_aws --dnssleep 100
+```
+
+Copy certs.
+
+```
+scp ~/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.cer bastion:/tmp
+scp ~/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.key bastion:/tmp
+scp ~/.acme.sh/master.ocp.eformat.nz/ca.cer bastion:/tmp
+# on bastion as root
+ssh bastion; sudo su -; cd /tmp
+mv master.ocp.eformat.nz.cer /etc/ansible
+mv master.ocp.eformat.nz.key /etc/ansible
+mv ca.cer /etc/ansible
+```
+
+Add to ansible/hosts file (see below for full file) e.g.
+
+```
+# master api certs
+openshift_master_overwrite_named_certificates=true
+openshift_master_named_certificates=[{"certfile": "{{ inventory_dir }}/master.ocp.eformat.nz.cer", "keyfile": "{{ inventory_dir }}/master.ocp.eformat.nz.key", "names": ["master.ocp.eformat.nz"], "cafile": "{{ inventory_dir }}/ca.cer"}]
+```
+
+Configure edge router certs once OCP installed
+
+```
+cat ~/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.cer ~/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.key ~/.acme.sh/master.ocp.eformat.nz/ca.cer > /tmp/cloudapps.router.pem
+oc secrets new router-certs tls.crt=/tmp/cloudapps.router.pem tls.key=/home/mike/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.key -o json --type='kubernetes.io/tls' -n default --confirm | oc replace -n default -f-
 ```
 
 ### Install OpenShift
@@ -1106,6 +1150,7 @@ yum -y install ansible atomic-openshift-utils atomic-client-utils openshift-ansi
 Setup a basic ansible/hosts
 
 ```
+# local machine
 scp ~/.ssh/config-ocp.eformat.nz-hosts bastion:/tmp/hosts
 # as root on bastion
 cp /tmp/hosts /etc/ansible/hosts
@@ -1133,8 +1178,7 @@ Subscription manager
 
 ```
 ansible nodes -b -m redhat_subscription -a \
-"state=present username=<user> password=<password>
-pool_ids=<pool>"
+"state=present username=<user> password=<password> pool_ids=<pool>"
 ```
 
 Repos
@@ -1165,10 +1209,11 @@ etcd
 
 # Set variables common for all OSEv3 hosts
 [OSEv3:vars]
+ansible_ssh_user=ec2-user
 ansible_become=yes
 openshift_deployment_type=openshift-enterprise
 openshift_release=v3.11
-openshift_image_tag=v3.11.16
+openshift_image_tag=v3.11.59
 
 # registry to install from
 oreg_auth_user=<terms based registry user>
@@ -1178,6 +1223,10 @@ oreg_auth_credentials_replace=true
 
 # login
 openshift_master_identity_providers=[{'name': 'github', 'challenge':'false', 'login': 'true', 'kind': 'GitHubIdentityProvider','mapping_method': 'claim', 'clientID': '<client id>','clientSecret': '<client secret>'}]
+
+# master api certs
+openshift_master_overwrite_named_certificates=true
+openshift_master_named_certificates=[{"certfile": "{{ inventory_dir }}/master.ocp.eformat.nz.cer", "keyfile": "{{ inventory_dir }}/master.ocp.eformat.nz.key", "names": ["master.ocp.eformat.nz"], "cafile": "{{ inventory_dir }}/ca.cer"}]
 
 # config-ocp.eformat.nz-cpk
 openshift_cloudprovider_kind=aws
@@ -1189,8 +1238,8 @@ openshift_cloudprovider_aws_secret_key=<aws secret key>
 openshift_hosted_manage_registry=true
 openshift_hosted_registry_storage_kind=object
 openshift_hosted_registry_storage_provider=s3
-openshift_hosted_registry_storage_s3_accesskey=<aws access key>
-openshift_hosted_registry_storage_s3_secretkey=<aws secret key>
+openshift_hosted_registry_storage_s3_accesskey=<aws iam access key>
+openshift_hosted_registry_storage_s3_secretkey=<aws iam secret key>
 openshift_hosted_registry_storage_s3_bucket=ocp.eformat.nz-registry
 openshift_hosted_registry_storage_s3_region=ap-southeast-2
 openshift_hosted_registry_storage_s3_chunksize=26214400
@@ -1199,7 +1248,7 @@ openshift_hosted_registry_pullthrough=true
 openshift_hosted_registry_acceptschema2=true
 openshift_hosted_registry_enforcequota=true
 openshift_hosted_registry_replicas=3
-openshift_hosted_registry_selector='region=infra'
+openshift_hosted_registry_selector={"node-role.kubernetes.io/infra":"true"}
 
 # config-ocp.eformat.nz-urls
 openshift_master_cluster_method=native
@@ -1248,9 +1297,9 @@ openshift_disable_check=memory_availability,disk_availability,docker_storage,pac
 
 # config-ocp.eformat.nz-hosts
 [masters]
-ip-172-16-24-133.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
-ip-172-16-38-204.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
-ip-172-16-58-66.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
+ip-172-16-26-107.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
+ip-172-16-37-85.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
+ip-172-16-55-231.ap-southeast-2.compute.internal openshift_node_group_name='node-config-master'
 
 [etcd]
 
@@ -1258,12 +1307,12 @@ ip-172-16-58-66.ap-southeast-2.compute.internal openshift_node_group_name='node-
 masters
 
 [nodes]
-ip-172-16-29-69.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
-ip-172-16-45-24.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
-ip-172-16-57-146.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
-ip-172-16-17-192.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
-ip-172-16-43-47.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
-ip-172-16-53-222.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
+ip-172-16-28-82.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
+ip-172-16-46-127.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
+ip-172-16-50-103.ap-southeast-2.compute.internal openshift_node_group_name='node-config-compute'
+ip-172-16-24-171.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
+ip-172-16-45-245.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
+ip-172-16-49-56.ap-southeast-2.compute.internal openshift_node_group_name='node-config-infra'
 
 [nodes:children]
 masters
