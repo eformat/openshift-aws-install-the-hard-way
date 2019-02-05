@@ -1023,9 +1023,21 @@ cd acme.sh
 egrep 'AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY' dnsapi/dns_aws.sh | head -2
 AWS_ACCESS_KEY_ID="xxxxxxx"
 AWS_SECRET_ACCESS_KEY="xxxxxxx"
-
 -- request wildcard cert
 ./acme.sh --issue -d master.ocp.eformat.nz -d *.apps.ocp.eformat.nz --dns dns_aws --dnssleep 100
+```
+
+`Notes: DNS Delegation and CAA`
+
+You must ensure root dns is delegated properly for acme.sh to succeed:
+
+- if delegating dns from your registry provider to aws, need to ensure root is also delegated
+- in this example eformat.nz is deletegated in registry to Route53, set a NS record for ocp.eformat.nz. using Route53 dns servers for ocp.eformat.nz which is a separate delegation and also in Route53
+- CAA for BOTH delgations needs a record set that holds `issuewild`
+
+```
+CAA
+0 issuewild "letsencrypt.org"
 ```
 
 Copy certs.
