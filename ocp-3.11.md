@@ -1389,6 +1389,20 @@ Delete Load Balancers
 for i in `aws elb describe-load-balancers --region=${region} --query="LoadBalancerDescriptions[].LoadBalancerName" --output text | tr '\n' ' '`; do aws elb delete-load-balancer --region=${region} --load-balancer-name ${i}; done
 ```
 
+Delete NAT Gatewats
+
+```
+for i in `aws ec2 describe-nat-gateways --region=${region} --query="NatGateways[].NatGatewayId" --output text | tr '\n' ' '`; do aws ec2 delete-nat-gateway --nat-gateway-id ${i} --region=${region}; done
+
+sleep 100
+```
+
+Delete the VPC
+
+```
+aws ec2 delete-vpc --vpc-id ${vpcid} --region=${region}
+```
+
 Delete Route Tables
 
 ```
@@ -1417,12 +1431,6 @@ Delete security groups (ignore message about being unable to delete default secu
 
 ```
 for i in `aws ec2 describe-security-groups --region=${region} --filters Name=vpc-id,Values="${vpcid}" | grep sg- | sed -E 's/^.*(sg-[a-z0-9]+).*$/\1/' | sort | uniq`; do aws ec2 delete-security-group --region=${region} --group-id $i; done
-```
-
-Delete the VPC
-
-```
-aws ec2 delete-vpc --vpc-id ${vpcid} --region=${region}
 ```
 
 Delete S3
