@@ -1318,13 +1318,13 @@ openshift_examples_modify_imagestreams=true
 openshift_examples_load_centos=false
 openshift_examples_load_rhel=true
 
-# Metrics
+# Metrics (Hawkular)
 openshift_metrics_install_metrics=false
 openshift_master_metrics_public_url=https://hawkular-metrics.apps.eformat.nz/hawkular/metrics
 
 # Prometheus
 openshift_hosted_prometheus_deploy=false
-openshift_prometheus_node_selector={"node-role.kubernetes.io/compute":"true"}
+openshift_prometheus_node_selector='node-role.kubernetes.io/compute=true'
 
 # logging
 openshift_logging_install_logging=false
