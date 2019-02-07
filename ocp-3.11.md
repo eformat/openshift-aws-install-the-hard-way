@@ -984,7 +984,7 @@ openshift_hosted_registry_pullthrough=true
 openshift_hosted_registry_acceptschema2=true
 openshift_hosted_registry_enforcequota=true
 openshift_hosted_registry_replicas=3
-openshift_hosted_registry_selector={"node-role.kubernetes.io/infra":"true"}
+openshift_hosted_registry_selector='node-role.kubernetes.io/infra=true'
 #<!-- END OUTPUT -->
 EOF
 
@@ -1290,7 +1290,7 @@ openshift_hosted_registry_pullthrough=true
 openshift_hosted_registry_acceptschema2=true
 openshift_hosted_registry_enforcequota=true
 openshift_hosted_registry_replicas=3
-openshift_hosted_registry_selector={"node-role.kubernetes.io/infra":"true"}
+openshift_hosted_registry_selector='node-role.kubernetes.io/infra=true'
 
 # config-ocp.eformat.nz-urls
 openshift_master_cluster_method=native
