@@ -74,16 +74,16 @@ export cidrsubnets_public=("172.16.0.0/24" "172.16.1.0/24" "172.16.2.0/24")
 export cidrsubnets_private=("172.16.16.0/20" "172.16.32.0/20" "172.16.48.0/20")
 export ec2_type_bastion="t2.small"
 export ec2_type_master="t2.medium"
-export ec2_type_infra="t2.medium"
-export ec2_type_node="t2.medium"
+export ec2_type_infra="t2.large"
+export ec2_type_node="t2.large"
 export rhel_release="rhel-7.6"
 export ec2_type_bastion_ebs_vol_size=25
 export ec2_type_master_ebs_vol_size=50
-export ec2_type_infra_ebs_vol_size=50
-export ec2_type_node_ebs_vol_size=50
-export ec2_type_master_number=1
-export ec2_type_infra_number=1
-export ec2_type_node_number=1
+export ec2_type_infra_ebs_vol_size=100
+export ec2_type_node_ebs_vol_size=100
+export ec2_type_master_number=3
+export ec2_type_infra_number=3
+export ec2_type_node_number=3
 ```
 
 Create a public private ssh keypair to be used with ssh-agent and ssh authentication on AWS EC2s
