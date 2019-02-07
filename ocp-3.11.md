@@ -1,14 +1,16 @@
 ## 3.11 OpenShift install on AWS the hard way
 
 Updated for 3.11 install. A Minimal install (all of the bits can be changed):
-- 9 node HA cluster (x3 masters, x3 infra, x3 app)
-- uses `t2.small|t2.medium` for all vm's for fun and cost
-- does not install OCS (see docs for details to do this) 
+- choose how many nodes - default 9 node HA cluster (x3 masters, x3 infra, x3 app), min 1,1,1
+- choose machine sizes - use `t2.small|t2.medium` for bastion|nodes for minimum install
+- choose machine ec2 ebs disk size
+- does not install OCS (see docs for details to do this)
 - uses latest RHEL cloud access ami images
-- based on ocp 3.9 instructions, but install is for ocp 3.11
+- install is for ocp 3.11
 - uses github oauth application credentials
 - new VPC created (can deploy to existing)
 - no ASG's
+- instructions for letsencrypt and dns setup
 
 Read the docs:
 - https://docs.okd.io/latest/install_config/configuring_aws.html
@@ -72,9 +74,16 @@ export cidrsubnets_public=("172.16.0.0/24" "172.16.1.0/24" "172.16.2.0/24")
 export cidrsubnets_private=("172.16.16.0/20" "172.16.32.0/20" "172.16.48.0/20")
 export ec2_type_bastion="t2.small"
 export ec2_type_master="t2.medium"
-export ec2_type_infra="t2.large"
-export ec2_type_node="t2.large"
+export ec2_type_infra="t2.medium"
+export ec2_type_node="t2.medium"
 export rhel_release="rhel-7.6"
+export ec2_type_bastion_ebs_vol_size=25
+export ec2_type_master_ebs_vol_size=50
+export ec2_type_infra_ebs_vol_size=50
+export ec2_type_node_ebs_vol_size=50
+export ec2_type_master_number=1
+export ec2_type_infra_number=1
+export ec2_type_node_number=1
 ```
 
 Create a public private ssh keypair to be used with ssh-agent and ssh authentication on AWS EC2s
@@ -745,7 +754,7 @@ export ec2_bastion=$(aws ec2 run-instances \
     --security-group-ids $(echo ${awssg_bastion} | jq -r '.GroupId') \
     --subnet-id $(echo ${subnet1_public} | jq -r '.Subnet.SubnetId') \
     --associate-public-ip-address \
-    --block-device-mappings "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=25}" \
+    --block-device-mappings "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_bastion_ebs_vol_size}}" \
     --user-data "$(/tmp/ec2_userdata.sh bastion ${ec2_type_bastion})" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=bastion},{Key=Clusterid,Value=${clusterid}}]")
 
@@ -760,7 +769,7 @@ aws ec2 associate-address \
 Create the master, infra and node EC2s along with EBS volumes
 
 ```bash
-for i in {1..3}; do
+for i in $( seq 1 ${ec2_type_master_number} ); do
     j="subnet${i}_private"
     export ec2_master${i}="$(aws ec2 run-instances \
         --region=${region} \
@@ -771,10 +780,10 @@ for i in {1..3}; do
         --security-group-ids $(echo ${awssg_master} | jq -r '.GroupId') $(echo ${awssg_node} | jq -r '.GroupId') \
         --subnet-id $(echo ${!j} | jq -r '.Subnet.SubnetId') \
         --block-device-mappings \
-            "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdb,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdc,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdd,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
+            "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_master_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdb,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_master_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdc,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_master_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdd,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_master_ebs_vol_size}}" \
         --user-data "$(/tmp/ec2_userdata.sh master ${ec2_type_master})" \
         --tag-specifications "ResourceType=instance,Tags=[ \
             {Key=Name,Value=master${i}}, \
@@ -784,7 +793,7 @@ for i in {1..3}; do
         )"
 done
 
-for i in {1..3}; do
+for i in $( seq 1 ${ec2_type_infra_number} ); do
     j="subnet${i}_private"
     export ec2_infra${i}="$(aws ec2 run-instances \
         --region=${region} \
@@ -795,10 +804,10 @@ for i in {1..3}; do
         --security-group-ids $(echo ${awssg_infra} | jq -r '.GroupId') $(echo ${awssg_node} | jq -r '.GroupId') \
         --subnet-id $(echo ${!j} | jq -r '.Subnet.SubnetId') \
         --block-device-mappings \
-            "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdb,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdc,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdd,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
+            "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_infra_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdb,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_infra_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdc,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_infra_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdd,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_infra_ebs_vol_size}}" \
         --user-data "$(/tmp/ec2_userdata.sh infra ${ec2_type_infra})" \
         --tag-specifications "ResourceType=instance,Tags=[ \
             {Key=Name,Value=infra${i}}, \
@@ -808,7 +817,7 @@ for i in {1..3}; do
         )"
 done
 
-for i in {1..3}; do
+for i in $( seq 1 ${ec2_type__number} ); do
     j="subnet${i}_private"
     export ec2_node${i}="$(aws ec2 run-instances \
         --region=${region} \
@@ -819,9 +828,9 @@ for i in {1..3}; do
         --security-group-ids $(echo ${awssg_node} | jq -r '.GroupId') \
         --subnet-id $(echo ${!j} | jq -r '.Subnet.SubnetId') \
         --block-device-mappings \
-            "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdb,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
-            "DeviceName=/dev/xvdc,Ebs={DeleteOnTermination=False,VolumeSize=100}" \
+            "DeviceName=/dev/sda1,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_node_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdb,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_node_ebs_vol_size}}" \
+            "DeviceName=/dev/xvdc,Ebs={DeleteOnTermination=False,VolumeSize=${ec2_type_node_ebs_vol_size}}" \
         --user-data "$(/tmp/ec2_userdata.sh node ${ec2_type_node})" \
         --tag-specifications "ResourceType=instance,Tags=[ \
             {Key=Name,Value=node${i}}, \
@@ -989,9 +998,9 @@ EOF
 
 cat << EOF > ~/.ssh/config-${clusterid}.${dns_domain}-hosts
 [masters]
-$(echo ${ec2_master1} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'master'}"
-$(echo ${ec2_master2} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'master'}"
-$(echo ${ec2_master3} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'master'}"
+$(echo ${ec2_master1} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-master'
+$(echo ${ec2_master2} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-master'
+$(echo ${ec2_master3} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-master'
 
 [etcd]
 
@@ -999,12 +1008,12 @@ $(echo ${ec2_master3} | jq -r '.Instances[].PrivateDnsName') openshift_node_labe
 masters
 
 [nodes]
-$(echo ${ec2_node1} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'apps'}"
-$(echo ${ec2_node2} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'apps'}"
-$(echo ${ec2_node3} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'apps'}"
-$(echo ${ec2_infra1} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
-$(echo ${ec2_infra2} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
-$(echo ${ec2_infra3} | jq -r '.Instances[].PrivateDnsName') openshift_node_labels="{'region': 'infra', 'zone': 'default'}"
+$(echo ${ec2_node1} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-compute'
+$(echo ${ec2_node2} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-compute'
+$(echo ${ec2_node3} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-compute'
+$(echo ${ec2_infra1} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-infra'
+$(echo ${ec2_infra2} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-infra'
+$(echo ${ec2_infra3} | jq -r '.Instances[].PrivateDnsName') openshift_node_group_name='node-config-infra'
 
 [nodes:children]
 masters
@@ -1047,7 +1056,10 @@ scp ~/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.cer bastion:/tmp
 scp ~/.acme.sh/master.ocp.eformat.nz/master.ocp.eformat.nz.key bastion:/tmp
 scp ~/.acme.sh/master.ocp.eformat.nz/ca.cer bastion:/tmp
 # on bastion as root
-ssh bastion; sudo su -; cd /tmp
+ssh bastion
+sudo su -
+cd /tmp
+mkdir /etc/ansible
 mv master.ocp.eformat.nz.cer /etc/ansible
 mv master.ocp.eformat.nz.key /etc/ansible
 mv ca.cer /etc/ansible
@@ -1110,10 +1122,27 @@ ssh-add -L
 ln -s config-ocp.eformat.nz config
 ```
 
-Delegate DNS in your dns provider in to aws servers (create public route53, delegate dns to aws)
+Delegate DNS to your top level domain (eformat.nz) - create public route53, delegate dns to aws
+
+Create NS record in Route53 that points to sub domain nameservers i.e.
 
 ```
 cat ~/.ssh/config-ocp.eformat.nz-domaindelegation
+```
+
+`(Letsencrypt Optional)`
+
+Create CAA for letsencrypt (See above) in Route53.
+
+If running your own bind locally, use NS for top level domain (Route53) so we can resolve CAA
+```
+-- /etc/named.conf
+
+        // dnsmasq, aws, google, forwarders
+        forwarders { 127.0.0.1 port 853; 205.251.193.246; 8.8.8.8; };
+
+dig eformat.nz caa
+dig ocp.eformat.nz caa
 ```
 
 Using github oauth application for login. Create a github org.
@@ -1145,8 +1174,8 @@ subscription-manager subscribe --pool=<pool>
 OCP 3.11
 
 ```
-subscription-manager repos --disable="*"
-subscription-manager repos --enable="rhel-7-server-ose-3.11-rpms" \
+subscription-manager repos --disable="*" \
+    --enable="rhel-7-server-ose-3.11-rpms" \
     --enable="rhel-7-server-rpms" \
     --enable="rhel-7-server-extras-rpms" \
     --enable="rhel-7-server-ansible-2.6-rpms"
@@ -1226,6 +1255,7 @@ ansible_become=yes
 openshift_deployment_type=openshift-enterprise
 openshift_release=v3.11
 openshift_image_tag=v3.11.59
+openshift_master_dynamic_provisioning_enabled=True
 
 # registry to install from
 oreg_auth_user=<terms based registry user>
