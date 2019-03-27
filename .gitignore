@@ -1,3 +1,4 @@
 .idea
 openshift-aws-install-the-hard-way.iml
 *~
+aws*.json
