@@ -455,7 +455,7 @@ aws ec2 authorize-security-group-ingress \
 --port 22 \
 --source-group $(echo ${awssg_bastion} | jq -r '.GroupId')
 
-for i in 53 2049 8053 10250; do
+for i in 53 2049 8053 10250 9100 8444; do
 aws ec2 authorize-security-group-ingress \
 --region=${region} \
 --group-id $(echo ${awssg_node} | jq -r '.GroupId') \
