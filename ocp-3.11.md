@@ -817,7 +817,7 @@ for i in $( seq 1 ${ec2_type_infra_number} ); do
         )"
 done
 
-for i in $( seq 1 ${ec2_type__number} ); do
+for i in $( seq 1 ${ec2_type_node_number} ); do
     j="subnet${i}_private"
     export ec2_node${i}="$(aws ec2 run-instances \
         --region=${region} \
